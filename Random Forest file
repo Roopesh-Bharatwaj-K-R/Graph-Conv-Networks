@@ -1,0 +1,86 @@
+import networkx as nx
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+
+file_path = "rwh.graphml"
+graph = nx.read_graphml(file_path)
+
+def extract_features(node):
+    # Extract relevant attributes from the node
+    attributes = graph.nodes[node]
+    
+    county = attributes.get("name", None)
+    eircode = attributes.get("labels", None)
+    hubname = attributes.get("HubLocation", None)
+    
+    # Return a feature vector
+    return [county, eircode, hubname]
+
+X = []
+y = []
+for node in graph.nodes:
+    attributes = graph.nodes[node]
+    label = attributes.get("name", None)
+    if label is not None:
+        feature_vector = extract_features(node)
+        X.append(feature_vector)
+        y.append(label)
+
+if len(X) == 0:
+    raise ValueError("No samples available for training. Check the attribute names and values in the GraphML file.")
+
+# Convert labels to numerical representation using label encoding
+label_encoder = LabelEncoder()
+y = label_encoder.fit_transform(y)
+
+# Convert features to numerical representation using one-hot encoding
+categorical_features = [0, 1, 2]  # Indices of the categorical features in the feature vector
+one_hot_encoder = OneHotEncoder(categories="auto", sparse=False)
+X = one_hot_encoder.fit_transform(X)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+if len(X_train) == 0 or len(X_test) == 0:
+    raise ValueError("The resulting train or test set is empty. Adjust the test_size parameter.")
+
+model = RandomForestClassifier()
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+
+# Set the desired figure size
+plt.figure(figsize=(10, 10))  # Adjust the values (width, height) as per your needs
+
+# Plot the predicted labels as a dotted graph
+pos = nx.spring_layout(graph)  # Compute the node positions for plotting
+
+# Convert the X_test node indices to node identifiers
+node_indices = np.arange(len(X))  # Create an array of node indices
+node_labels = label_encoder.inverse_transform(y)  # Get the original labels of nodes
+node_ids = [list(graph.nodes)[i] for i in node_indices]  # Convert node indices to node identifiers
+
+# Plot the nodes with predicted labels
+for node_id, label in zip(node_ids, y_pred):
+    if node_id in graph.nodes:
+        nx.draw_networkx_nodes(graph, pos, nodelist=[node_id], node_color='r', node_size=15)
+
+# Plot the nodes with true labels (if available)
+for node_id, label in zip(node_ids, y_test):
+    if node_id in graph.nodes:
+        nx.draw_networkx_nodes(graph, pos, nodelist=[node_id], node_color='b', node_size=15)
+
+# Plot the edges
+nx.draw_networkx_edges(graph, pos)
+
+# Plot the labels
+node_labels = {node_id: label for node_id, label in zip(node_ids, y_pred)}
+nx.draw_networkx_labels(graph, pos, labels=node_labels)
+
+# Set plot title and show the graph
+plt.title('Node Classification RWH')
+plt.axis('off')
+plt.show()
